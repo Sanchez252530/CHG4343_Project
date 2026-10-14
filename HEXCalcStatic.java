@@ -413,10 +413,10 @@ public class HEXCalcStatic {
         }
 
         double waterFricFactor;
-        if (waterFlowRegime.equals("Laminar") && waterInAnnulus == true){
+        if (waterFlowRegime.equals("Laminar") && waterInAnnulus == false){
             waterFricFactor = 64 / waterRe;
         }
-        else if (waterFlowRegime.equals("Laminar") && waterInAnnulus == false){
+        else if (waterFlowRegime.equals("Laminar") && waterInAnnulus == true){
             double dRatio = Initialize.DInnerOutside / Initialize.DOuterInside;
             waterFricFactor = (64 / waterRe) * ((Math.pow(1 - dRatio,2)) / (1 + (dRatio * dRatio) + ((1 - Math.pow(dRatio,2)) / Math.log(dRatio))));
         }
