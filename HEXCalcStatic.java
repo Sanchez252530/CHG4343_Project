@@ -325,6 +325,20 @@ public class HEXCalcStatic {
         return waterInletTemp - (heatTransRate / waterHeatCapRate);
     }
 
+    public static double DeltaTempMin(double waterInletTemp, double processInletTemp, double waterOutletTemp, double processOutletTemp, boolean isCountercurrent){
+        double deltaTempMin=0;
+        //Parallel flow
+        if(!isCountercurrent){
+            deltaTempMin=Math.min(waterInletTemp-processInletTemp,waterOutletTemp-processOutletTemp);
+        }
+        //Countercurrent flow
+        else
+        {
+            deltaTempMin=Math.min(waterInletTemp-processOutletTemp,waterOutletTemp-processInletTemp);
+        }
+        return deltaTempMin;
+    }
+
     public static double HEXCost(double processFlow, double waterFlow, boolean waterInAnnulus){
         // this function also prints the pressure drops since they're not really useful anywhere else
         // so we need the DecimalFormat object since we only return the annual cost
