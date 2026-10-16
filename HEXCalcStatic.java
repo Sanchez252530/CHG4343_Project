@@ -224,16 +224,16 @@ public class HEXCalcStatic {
                     System.out.println("No correlation available for annulus Nusselt");
                     System.exit(0);
                 }
-                else if (dRatio <= 0.05 && dRatio >= 0.10){
+                else if (dRatio >= 0.05 && dRatio < 0.10){
                     processNu = 17.46 + (11.56 - 17.46)*((dRatio - 0.05)/(0.10 - 0.05));
                 }
-                else if (dRatio <= 0.10 && dRatio >= 0.25){
+                else if (dRatio >= 0.10 && dRatio < 0.25){
                     processNu = 11.56 + (7.37 - 11.56)*((dRatio - 0.10)/(0.25 - 0.10));
                 }
-                else if (dRatio <= 0.25 && dRatio >= 0.50){
+                else if (dRatio >= 0.25 && dRatio < 0.50){
                     processNu = 7.37 + (5.74 - 7.37)*((dRatio - 0.25)/(0.50 - 0.25));
                 }
-                else if (dRatio <= 0.50 && dRatio >= 1.00){
+                else if (dRatio >= 0.50 && dRatio < 1.00){
                     processNu = 5.74 + (4.86 - 5.74)*((dRatio - 0.50)/(1.00 - 0.50));
                 }
                 else {
