@@ -1,6 +1,8 @@
 import java.text.DecimalFormat;
 
+
 public class HEXCalcStatic {
+
     public static void HEXSolver(double processFlow, double waterFlow, double processInletTemp, double waterInletTemp, boolean waterInAnnulus, boolean countercurrent){
         DecimalFormat df = new DecimalFormat("0.00");
         double heatTransRate = HEXCalcStatic.HeatTransferRate(processFlow, waterFlow, processInletTemp, waterInletTemp, waterInAnnulus, countercurrent);
@@ -15,6 +17,104 @@ public class HEXCalcStatic {
         double totalCost = HEXCalcStatic.HEXCost(processFlow, waterFlow, waterInAnnulus);
         System.out.println("Total annual cost is: "+df.format(totalCost)+" CAD/year");
     }
+
+    public static String StreamCheck(double re, double pr){
+        String regime = "";
+        if (re <= 2300) {
+            regime = "Laminar";
+        }
+        else if (re >= 10000) {
+            regime = "Turbulent";
+        }
+        else {
+            System.out.println("Process Reynolds between 2300 and 10000");
+            System.out.println("No correlation for process flow regime");
+            System.exit(0);
+        }
+        if (pr < 0.5 || pr > 2000){
+            System.out.println("Water Prandtl not between 0.5 and 2000");
+            System.out.println("No correlation for water flow regime");
+            System.exit(0);
+        }
+        return regime;
+
+    }
+
+    public static double InnerPipeNu(double re, double pr, String regime ,double totalLen){
+        double nu;
+        if(regime.equals("Turbulent")){
+            double fricFactor = Math.pow(-1.8 * Math.log10(6.9/re), -2);
+            nu = ((fricFactor/8)*(re - 1000)*pr) / (1 + 12.7 * Math.sqrt(fricFactor/8)*(Math.pow(pr,2.0/3.0)-1));
+        }else{
+            double graetz = re * pr * Initialize.DInnerInside / totalLen;
+            nu = 3.66 + ((0.0668 * graetz) / (1 + 0.04 * Math.pow(graetz,2.0/3.0)));
+        }
+        return nu;
+    }
+
+    public static double AnnulusNu(double re, double pr, String regime, double totalLeg){
+        double annulusHydroD = Initialize.DOuterInside - Initialize.DInnerOutside;
+        double dRatio = Initialize.DInnerOutside / Initialize.DOuterInside;
+        double nu = 0;
+        if (regime.equals("Laminar")){
+            if (dRatio < 0.05){
+                System.out.println("Diameter ratio out of range");
+                System.out.println("No correlation available for annulus Nusselt");
+                System.exit(0);
+            }
+            else if (dRatio >= 0.05 && dRatio < 0.10){
+                nu = 17.46 + (11.56 - 17.46)*((dRatio - 0.05)/(0.10 - 0.05));
+            }
+            else if (dRatio >= 0.10 && dRatio < 0.25){
+                nu = 11.56 + (7.37 - 11.56)*((dRatio - 0.10)/(0.25 - 0.10));
+            }
+            else if (dRatio >= 0.25 && dRatio < 0.50){
+                nu = 7.37 + (5.74 - 7.37)*((dRatio - 0.25)/(0.50 - 0.25));
+            }
+            else if (dRatio >= 0.50 && dRatio < 1.00){
+                nu = 5.74 + (4.86 - 5.74)*((dRatio - 0.50)/(1.00 - 0.50));
+            }
+            else {
+                System.out.println("Diameter ratio out of range");
+                System.out.println("No correlation available for annulus Nusselt");
+                System.exit(0);
+            }
+        }
+        else {
+            double waterReModified = re * (((1 + Math.pow(dRatio,2))*Math.log(dRatio) + (1 - Math.pow(dRatio,2))) / (Math.pow(1 - dRatio,2) * Math.log(dRatio)));
+            double waterFricFactor = Math.pow(1.8 * Math.log10(waterReModified) - 1.5, -2);
+            double waterCorrection = 1.07 + (900 / re) - (0.63 / (1 + 10 * pr));
+            double waterGeometryFactor = 0.75 * Math.pow(dRatio,-0.17);
+            double waterLengthCorr = 1 + Math.pow(annulusHydroD / totalLeg,0.66666666666666667);
+            nu = waterLengthCorr * waterGeometryFactor * (waterFricFactor/8) * re * pr / (waterCorrection + 12.7 * Math.sqrt(waterFricFactor/8) * (Math.pow(pr,0.66666666666666667) - 1));
+        }
+
+        return nu;
+    }
+
+    public static double PressureDrop(double re, double velo, double density, double d_h,
+                                      boolean inInnerPipe, double totalLeg, double minorLossCoeff){
+        double fricFactor=0;
+        if (re <= 2300){
+            if (inInnerPipe){
+                fricFactor = 64 / re;
+            }
+            else {
+                double dRatio = Initialize.DInnerOutside / Initialize.DOuterInside;
+                fricFactor = (64 / re) * ((Math.pow(1 - dRatio,2)) / (1 + (dRatio * dRatio) + ((1 - Math.pow(dRatio,2)) / Math.log(dRatio))));
+            }
+        }
+        else if (re >= 10000){
+            fricFactor = Math.pow(-1.8 * Math.log10(Math.pow((Initialize.AbsRoughness /(3.7 * d_h)),1.11) + (6.9 / re)),-2);
+        }
+        else {
+            System.out.println("Reynolds between 2300 and 10000");
+            System.out.println("No correlation for flow regime");
+            System.exit(0);
+        }
+        return (fricFactor * (totalLeg / d_h) + minorLossCoeff) * (0.5 * density * velo * velo);
+    }
+
 
     public static double HeatTransferRate(double processFlow, double waterFlow, double processInletTemp, double waterInletTemp, boolean waterInAnnulus, boolean countercurrent){
         if (processFlow <= 0){
@@ -38,38 +138,14 @@ public class HEXCalcStatic {
             double processRe = (processVelo * Initialize.DInnerInside * Initialize.DensityProcess) / Initialize.DynViscosityProcess;
             double processPr = (Initialize.SpecHeatCapProcess *Initialize.DynViscosityProcess) / Initialize.ThermCondProcess;
 
-            String processFlowRegime = "";
-            if (processRe <= 2300) {
-                processFlowRegime = "Laminar";
-            }
-            else if (processRe >= 10000) {
-                processFlowRegime = "Turbulent";
-            }
-            else {
-                System.out.println("Process Reynolds between 2300 and 10000");
-                System.out.println("No correlation for process flow regime");
-                System.exit(0);
-            }
-
-            if (processPr >= 0.5 && processPr <= 2000){
-            }
-            else {
-                System.out.println("Process Prandtl not between 0.5 and 2000");
-                System.out.println("No correlation for process flow regime");
-                System.exit(0);
-            }
+            //Replaced with one of the methods above
+            String processFlowRegime=StreamCheck(processRe,processPr);
 
             double processGraetz;
             double processNu = 0; // It needs this initialized or the IDE is angry
-            double processFricFactor;
-            if (processFlowRegime.equals("Turbulent")){
-                processFricFactor = Math.pow(-1.8 * Math.log10(6.9/processRe), -2);
-                processNu = ((processFricFactor/8)*(processRe - 1000)*processPr) / (1 + 12.7 * Math.sqrt(processFricFactor/8)*(Math.pow(processPr,0.66666666666666667)-1));
-            }
-            else{
-                processGraetz = processRe * processPr * Initialize.DInnerInside / totalLeg;
-                processNu = 3.66 + ((0.0668 * processGraetz) / (1 + 0.04 * Math.pow(processGraetz,0.66666666666666667)));
-            }
+
+            //Replaced with one of the methods above
+            processNu=InnerPipeNu(processRe,processPr,processFlowRegime,totalLeg);
 
             double processHeatTransCoeff = processNu * Initialize.ThermCondProcess / Initialize.DInnerInside;
 
@@ -78,62 +154,14 @@ public class HEXCalcStatic {
             double waterRe = Initialize.DensityWater * annulusHydroD * waterVelo / Initialize.DynViscosityWater;
             double waterPr = Initialize.DynViscosityWater * Initialize.SpecHeatCapWater / Initialize.ThermCondWater;
 
-            String waterFlowRegime = "";
-            if (waterRe <= 2300) {
-                waterFlowRegime = "Laminar";
-            }
-            else if (waterRe >= 10000) {
-                waterFlowRegime = "Turbulent";
-            }
-            else {
-                System.out.println("Water Reynolds between 2300 and 10000");
-                System.out.println("No correlation for water flow regime");
-                System.exit(0);
-            }
-
-            if (waterPr >= 0.5 && waterPr <= 2000){
-            }
-            else {
-                System.out.println("Water Prandtl not between 0.5 and 2000");
-                System.out.println("No correlation for water flow regime");
-                System.exit(0);
-            }
+            //Replaced with one of the methods above
+            String waterFlowRegime= StreamCheck(waterRe,waterPr);
 
             double waterNu = 0;
             double dRatio = Initialize.DInnerOutside / Initialize.DOuterInside;
-            if (waterFlowRegime.equals("Laminar")) {
-                // this is the interpolation table
-                if (dRatio < 0.05){
-                    System.out.println("Diameter ratio out of range");
-                    System.out.println("No correlation available for annulus Nusselt");
-                    System.exit(0);
-                }
-                else if (dRatio >= 0.05 && dRatio < 0.10){
-                    waterNu = 17.46 + (11.56 - 17.46)*((dRatio - 0.05)/(0.10 - 0.05));
-                }
-                else if (dRatio >= 0.10 && dRatio < 0.25){
-                    waterNu = 11.56 + (7.37 - 11.56)*((dRatio - 0.10)/(0.25 - 0.10));
-                }
-                else if (dRatio >= 0.25 && dRatio < 0.50){
-                    waterNu = 7.37 + (5.74 - 7.37)*((dRatio - 0.25)/(0.50 - 0.25));
-                }
-                else if (dRatio >= 0.50 && dRatio < 1.00){
-                    waterNu = 5.74 + (4.86 - 5.74)*((dRatio - 0.50)/(1.00 - 0.50));
-                }
-                else {
-                    System.out.println("Diameter ratio out of range");
-                    System.out.println("No correlation available for annulus Nusselt");
-                    System.exit(0);
-                }
-            }
-            else{
-                double waterReModified = waterRe * (((1 + Math.pow(dRatio,2))*Math.log(dRatio) + (1 - Math.pow(dRatio,2))) / (Math.pow(1 - dRatio,2) * Math.log(dRatio)));
-                double waterFricFactor = Math.pow(1.8 * Math.log10(waterReModified) - 1.5, -2);
-                double waterCorrection = 1.07 + (900 / waterRe) - (0.63 / (1 + 10 * waterPr));
-                double waterGeometryFactor = 0.75 * Math.pow(dRatio,-0.17);
-                double waterLengthCorr = 1 + Math.pow(annulusHydroD / totalLeg,0.66666666666666667);
-                waterNu = waterLengthCorr * waterGeometryFactor * (waterFricFactor/8) * waterRe * waterPr / (waterCorrection + 12.7 * Math.sqrt(waterFricFactor/8) * (Math.pow(waterPr,0.66666666666666667) - 1));
-            }
+
+            //Replaced with one of the methods above
+            waterNu=AnnulusNu(waterRe,waterPr,waterFlowRegime,totalLeg);
 
             double waterHeatTransCoeff = waterNu * Initialize.ThermCondWater / annulusHydroD;
 
@@ -154,102 +182,24 @@ public class HEXCalcStatic {
             double waterRe = (waterVelo * Initialize.DInnerInside * Initialize.DensityWater) / Initialize.DynViscosityWater;
             double waterPr = (Initialize.SpecHeatCapWater *Initialize.DynViscosityWater) / Initialize.ThermCondWater;
 
-            String waterFlowRegime = "";
-            if (waterRe <= 2300) {
-                waterFlowRegime = "Laminar";
-            }
-            else if (waterRe >= 10000) {
-                waterFlowRegime = "Turbulent";
-            }
-            else {
-                System.out.println("Water Reynolds between 2300 and 10000");
-                System.out.println("No correlation for water flow regime");
-                System.exit(0);
-            }
-
-            if (waterPr >= 0.5 && waterPr <= 2000){
-            }
-            else {
-                System.out.println("Water Prandtl not between 0.5 and 2000");
-                System.out.println("No correlation for water flow regime");
-                System.exit(0);
-            }
-
+            String waterFlowRegime=StreamCheck(waterRe,waterPr);
             double waterGraetz;
             double waterNu = 0; // It needs this initialized or the IDE is angry
-            double waterFricFactor;
-            if (waterFlowRegime.equals("Turbulent")){
-                waterFricFactor = Math.pow(-1.8 * Math.log10(6.9/waterRe), -2);
-                waterNu = ((waterFricFactor/8)*(waterRe - 1000)*waterPr) / (1 + 12.7 * Math.sqrt(waterFricFactor/8)*(Math.pow(waterPr,0.66666666666666667)-1));
-            }
-            else{
-                waterGraetz = waterRe * waterPr * Initialize.DInnerInside / totalLeg;
-                waterNu = 3.66 + ((0.0668 * waterGraetz) / (1 + 0.04 * Math.pow(waterGraetz,0.66666666666666667)));
-            }
-
+            //Replaced with one of the methods above
+            waterNu=InnerPipeNu(waterRe,waterPr,waterFlowRegime,totalLeg);
             double waterHeatTransCoeff = waterNu * Initialize.ThermCondWater / Initialize.DInnerInside;
 
             // now for the process calcs for the annulus
             double processVelo = processFlow / (annulusArea * Initialize.DensityProcess);
             double processRe = Initialize.DensityProcess * annulusHydroD * processVelo / Initialize.DynViscosityProcess;
             double processPr = Initialize.DynViscosityProcess * Initialize.SpecHeatCapProcess / Initialize.ThermCondProcess;
-
-            String processFlowRegime = "";
-            if (processRe <= 2300) {
-                processFlowRegime = "Laminar";
-            }
-            else if (processRe >= 10000) {
-                processFlowRegime = "Turbulent";
-            }
-            else {
-                System.out.println("Process Reynolds between 2300 and 10000");
-                System.out.println("No correlation for process flow regime");
-                System.exit(0);
-            }
-
-            if (processPr >= 0.5 && processPr <= 2000){
-            }
-            else {
-                System.out.println("Process Prandtl not between 0.5 and 2000");
-                System.out.println("No correlation for process flow regime");
-                System.exit(0);
-            }
+            //Replaced with one of the methods above
+            String processFlowRegime=StreamCheck(processRe,processPr);
 
             double processNu = 0;
             double dRatio = Initialize.DInnerOutside / Initialize.DOuterInside;
-            if (processFlowRegime.equals("Laminar")) {
-                // this is the interpolation table
-                if (dRatio < 0.05){
-                    System.out.println("Diameter ratio out of range");
-                    System.out.println("No correlation available for annulus Nusselt");
-                    System.exit(0);
-                }
-                else if (dRatio >= 0.05 && dRatio < 0.10){
-                    processNu = 17.46 + (11.56 - 17.46)*((dRatio - 0.05)/(0.10 - 0.05));
-                }
-                else if (dRatio >= 0.10 && dRatio < 0.25){
-                    processNu = 11.56 + (7.37 - 11.56)*((dRatio - 0.10)/(0.25 - 0.10));
-                }
-                else if (dRatio >= 0.25 && dRatio < 0.50){
-                    processNu = 7.37 + (5.74 - 7.37)*((dRatio - 0.25)/(0.50 - 0.25));
-                }
-                else if (dRatio >= 0.50 && dRatio < 1.00){
-                    processNu = 5.74 + (4.86 - 5.74)*((dRatio - 0.50)/(1.00 - 0.50));
-                }
-                else {
-                    System.out.println("Diameter ratio out of range");
-                    System.out.println("No correlation available for annulus Nusselt");
-                    System.exit(0);
-                }
-            }
-            else{
-                double processReModified = processRe * (((1 + Math.pow(dRatio,2))*Math.log(dRatio) + (1 - Math.pow(dRatio,2))) / (Math.pow(1 - dRatio,2) * Math.log(dRatio)));
-                double processFricFactor = Math.pow(1.8 * Math.log10(processReModified) - 1.5, -2);
-                double processCorrection = 1.07 + (900 / processRe) - (0.63 / (1 + 10 * processPr));
-                double processGeometryFactor = 0.75 * Math.pow(dRatio,-0.17);
-                double processLengthCorr = 1 + Math.pow(annulusHydroD / totalLeg,0.66666666666666667);
-                processNu = processLengthCorr * processGeometryFactor * (processFricFactor/8) * processRe * processPr / (processCorrection + 12.7 * Math.sqrt(processFricFactor/8) * (Math.pow(processPr,0.66666666666666667) - 1));
-            }
+            //Replaced with one of the methods above
+            processNu=AnnulusNu(processRe,processPr,processFlowRegime,totalLeg);
 
             double processHeatTransCoeff = processNu * Initialize.ThermCondProcess / annulusHydroD;
 
@@ -260,15 +210,6 @@ public class HEXCalcStatic {
             double annulusConvRes = 1 / processHeatTransCoeff;
             double totalThermalRes = innerPipeConvRes + innerPipeFoulRes + pipeWallCondRes + annulusFoulRes + annulusConvRes;
             overallHeatTransCoeff = 1 / totalThermalRes;
-        }
-
-        if (processFlow <= 0){
-            System.out.println("Error: Process flow value is invalid");
-            System.exit(0);
-        }
-        if (waterFlow <= 0){
-            System.out.println("Error: Hot water flow value is invalid");
-            System.exit(0);
         }
 
         double heatTransArea = Math.PI * Initialize.DInnerOutside * totalLeg;
@@ -384,61 +325,13 @@ public class HEXCalcStatic {
         }
 
         // process flow pressure drop
-        String processFlowRegime = "";
-        if (processRe <= 2300) {
-            processFlowRegime = "Laminar";
-        }
-        else if (processRe >= 10000) {
-            processFlowRegime = "Turbulent";
-        }
-        else {
-            System.out.println("Process Reynolds between 2300 and 10000");
-            System.out.println("No correlation for process flow regime");
-            System.exit(0);
-        }
-
-        double processFricFactor;
-        if (processFlowRegime.equals("Laminar") && waterInAnnulus == true){
-            processFricFactor = 64 / processRe;
-        }
-        else if (processFlowRegime.equals("Laminar") && waterInAnnulus == false){
-            double dRatio = Initialize.DInnerOutside / Initialize.DOuterInside;
-            processFricFactor = (64 / processRe) * ((Math.pow(1 - dRatio,2)) / (1 + (dRatio * dRatio) + ((1 - Math.pow(dRatio,2)) / Math.log(dRatio))));
-        }
-        else {
-            processFricFactor = Math.pow(-1.8 * Math.log10(Math.pow((Initialize.AbsRoughness /(3.7 * processD_h)),1.11) + (6.9 / processRe)),-2);
-        }
-
-        double processPressureDrop = (processFricFactor * (totalLeg / processD_h) + minorLossCoeff) * (0.5 * Initialize.DensityProcess * processVelo * processVelo);
+        // Replaced with one of the methods above
+        double processPressureDrop=PressureDrop(processRe,processVelo,Initialize.DensityProcess,processD_h,waterInAnnulus,totalLeg,minorLossCoeff);
         System.out.println("The process fluid pressure drop is "+df.format(processPressureDrop)+" Pa");
 
         // now for the water pressure drop
-        String waterFlowRegime = "";
-        if (waterRe <= 2300) {
-            waterFlowRegime = "Laminar";
-        }
-        else if (waterRe >= 10000) {
-            waterFlowRegime = "Turbulent";
-        }
-        else {
-            System.out.println("Water Reynolds between 2300 and 10000");
-            System.out.println("No correlation for water flow regime");
-            System.exit(0);
-        }
-
-        double waterFricFactor;
-        if (waterFlowRegime.equals("Laminar") && waterInAnnulus == false){
-            waterFricFactor = 64 / waterRe;
-        }
-        else if (waterFlowRegime.equals("Laminar") && waterInAnnulus == true){
-            double dRatio = Initialize.DInnerOutside / Initialize.DOuterInside;
-            waterFricFactor = (64 / waterRe) * ((Math.pow(1 - dRatio,2)) / (1 + (dRatio * dRatio) + ((1 - Math.pow(dRatio,2)) / Math.log(dRatio))));
-        }
-        else {
-            waterFricFactor = Math.pow(-1.8 * Math.log10(Math.pow((Initialize.AbsRoughness /(3.7 * waterD_h)),1.11) + (6.9 / waterRe)),-2);
-        }
-
-        double waterPressureDrop = (waterFricFactor * (totalLeg / waterD_h) + minorLossCoeff) * (0.5 * Initialize.DensityWater * waterVelo * waterVelo);
+        // Replaced with one of the methods above
+        double waterPressureDrop= PressureDrop(waterRe,waterVelo, Initialize.DensityWater,waterD_h,!waterInAnnulus, totalLeg,minorLossCoeff);
         System.out.println("The hot water pressure drop is "+df.format(waterPressureDrop)+" Pa");
 
         // now for the actual costing stuff
