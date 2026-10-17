@@ -18,7 +18,7 @@ public class HEXCalcStatic {
         System.out.println("Total annual cost is: "+df.format(totalCost)+" CAD/year");
     }
 
-    //New methods added-Start
+    //New methods added-Starts
     public static String StreamCheck(double re, double pr){
         String regime = "";
         if (re <= 2300) {
