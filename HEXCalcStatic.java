@@ -18,6 +18,7 @@ public class HEXCalcStatic {
         System.out.println("Total annual cost is: "+df.format(totalCost)+" CAD/year");
     }
 
+    //New methods added-Start
     public static String StreamCheck(double re, double pr){
         String regime = "";
         if (re <= 2300) {
@@ -114,7 +115,7 @@ public class HEXCalcStatic {
         }
         return (fricFactor * (totalLeg / d_h) + minorLossCoeff) * (0.5 * density * velo * velo);
     }
-
+    //New method added-End
 
     public static double HeatTransferRate(double processFlow, double waterFlow, double processInletTemp, double waterInletTemp, boolean waterInAnnulus, boolean countercurrent){
         if (processFlow <= 0){
